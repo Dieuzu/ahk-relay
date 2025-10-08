@@ -8,6 +8,9 @@ app.use(express.json());
 // In-memory storage: { code: [ {id, from, cmd, args, ts} ] }
 const queues = {};
 
+// Optional: control log noise (set VERBOSE=0 to reduce empty pop logs)
+const VERBOSE = process.env.VERBOSE !== '0';
+
 // POST /push
 // body: { code: '123456', from: 'pc1', cmd: 'TEST', args: { ... } }
 app.post('/push', (req, res) => {
@@ -23,6 +26,7 @@ app.post('/push', (req, res) => {
   };
   queues[code] = queues[code] || [];
   queues[code].push(item);
+  console.log(`[PUSH] code=${code} id=${item.id} cmd=${item.cmd} from=${item.from} qlen=${queues[code].length}`);
   return res.json({ ok:true, item });
 });
 
@@ -32,8 +36,12 @@ app.get('/pop', (req, res) => {
   const code = req.query.code;
   if (!code) return res.status(400).json({ ok:false, error:'missing code' });
   const q = queues[code] || [];
-  if (q.length === 0) return res.json({ ok:true, found:false });
+  if (q.length === 0) {
+    if (VERBOSE) console.log(`[POP] code=${code} empty`);
+    return res.json({ ok:true, found:false });
+  }
   const item = q.shift();
+  console.log(`[POP] code=${code} id=${item.id} cmd=${item.cmd} remaining=${q.length}`);
   return res.json({ ok:true, found:true, item });
 });
 
@@ -41,6 +49,7 @@ app.get('/pop', (req, res) => {
 app.get('/peek', (req, res) => {
   const code = req.query.code;
   if (!code) return res.status(400).json({ ok:false, error:'missing code' });
+  console.log(`[PEEK] code=${code} size=${(queues[code]||[]).length}`);
   return res.json({ ok:true, queue: queues[code] || [] });
 });
 
@@ -49,6 +58,7 @@ app.post('/ack', (req, res) => {
   const { code, id } = req.body || {};
   if (!code || !id) return res.status(400).json({ ok:false, error:'missing code/id' });
   // no persistence in this simple version
+  if (VERBOSE) console.log(`[ACK] code=${code} id=${id}`);
   return res.json({ ok:true });
 });
 
